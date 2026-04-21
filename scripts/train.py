@@ -71,6 +71,8 @@ def main(cfg: OmegaConf):
         cfg.policy.obs_dim = 36
         cfg.policy.model.cond_dim = 36
         cfg.task.obs_dim = 36
+        # hold-out mission for per-epoch RMSE validation
+        cfg.task.grand_tour_val_mission = 'SPX-2'
 
     cls = hydra.utils.get_class(cfg._target_)
     workspace: BaseWorkspace = cls(cfg)

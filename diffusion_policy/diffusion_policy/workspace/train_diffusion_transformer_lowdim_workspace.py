@@ -83,6 +83,20 @@ class TrainDiffusionTransformerLowdimWorkspace(BaseWorkspace):
         val_dataset = dataset.get_validation_dataset()
         val_dataloader = DataLoader(val_dataset, **cfg.val_dataloader)
 
+        # hold-out grand_tour mission for per-epoch RMSE validation
+        grand_tour_val_dataloader = None
+        if hasattr(cfg.task, 'grand_tour_val_mission'):
+            from diffusion_policy.dataset.grand_tour_dataset import GrandTourDataset
+            _gt_val_ds = GrandTourDataset(
+                dataset_path=f"datasets/grand_tour/{cfg.task.grand_tour_val_mission}",
+                horizon=cfg.task.dataset.horizon,
+                pad_before=cfg.task.dataset.pad_before,
+                pad_after=cfg.task.dataset.pad_after,
+                val_ratio=0.0,
+                seed=cfg.task.dataset.seed,
+            )
+            grand_tour_val_dataloader = DataLoader(_gt_val_ds, **cfg.val_dataloader)
+
         self.model.set_normalizer(normalizer)
         if cfg.training.use_ema:
             self.ema_model.set_normalizer(normalizer)
@@ -283,7 +297,18 @@ class TrainDiffusionTransformerLowdimWorkspace(BaseWorkspace):
                             val_loss = torch.mean(torch.tensor(val_losses)).item()
                             # log epoch average validation loss
                             step_log['val_loss'] = np.sqrt(val_loss)
-            
+
+                # grand_tour hold-out mission RMSE (every epoch)
+                if grand_tour_val_dataloader is not None:
+                    with torch.no_grad():
+                        gt_val_losses = []
+                        for batch in grand_tour_val_dataloader:
+                            batch = dict_apply(batch, lambda x: x.to(device, non_blocking=True))
+                            loss = self.model.compute_loss(batch)
+                            gt_val_losses.append(loss.item())
+                        mission = cfg.task.grand_tour_val_mission.lower().replace('-', '_')
+                        step_log[f'{mission}_val_rmse'] = np.sqrt(np.mean(gt_val_losses))
+
                 # run diffusion sampling on a training batch
                 if (self.epoch % cfg.training.sample_every) == 0:
                     with torch.no_grad():
