@@ -7,6 +7,17 @@ The Conference on Robot Learning (CoRL), 2024
 
 [Paper](https://diffuselo.co/static/paper/DiffuseLoco.pdf) / [Project Page](https://diffuselo.co)
 
+## For Grand Tour 
+
+First follow installation instructions for `diffuseloco` within conda. Once that is done, run:
+
+```bash 
+python scripts/train.py --ds grand_tour 
+
+```
+```
+```
+
 
 ## Codebase Structure
 
