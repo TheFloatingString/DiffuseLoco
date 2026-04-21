@@ -66,6 +66,11 @@ def main(cfg: OmegaConf):
         cfg.task.env_runner = OC.create({
             '_target_': 'diffusion_policy.env_runner.null_runner.NullRunner',
         })
+        # grand_tour obs is 36-dim (vs 45 for CyberDog): update model input sizes
+        cfg.obs_dim = 36
+        cfg.policy.obs_dim = 36
+        cfg.policy.model.cond_dim = 36
+        cfg.task.obs_dim = 36
 
     cls = hydra.utils.get_class(cfg._target_)
     workspace: BaseWorkspace = cls(cfg)
