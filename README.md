@@ -11,12 +11,34 @@ The Conference on Robot Learning (CoRL), 2024
 
 First follow installation instructions for `diffuseloco` within conda. Once that is done, run:
 
-```bash 
-python scripts/train.py --ds grand_tour 
+```bash
+python scripts/train.py --ds grand_tour
+```
 
+This trains on `datasets/grand_tour/LEICA-1` using the same model architecture as the original CyberDog training, with obs dim 36 (base_lin_vel, base_ang_vel, projected_gravity, velocity_commands, joint_pos, joint_vel) and action dim 12 (absolute joint positions). SPX-2 is used as a held-out validation mission and its RMSE is logged to wandb every epoch.
+
+### Inference Server
+
+To serve a trained checkpoint over HTTP:
+
+```bash
+pip install fastapi uvicorn
+python scripts/serve.py --checkpoint <path_to_ckpt> --device cuda:0 --host 0.0.0.0 --port 8000
 ```
+
+**Health check:**
+```bash
+curl http://localhost:8000/health
 ```
+
+**Predict next joint positions** — send a window of the last `n_obs_steps=8` observations (each 36-dim):
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"obs": [[...36 floats...], ...]}'
 ```
+
+Returns `{"action": [[12 floats] * 4]}` — the next 4 absolute joint position targets in radians (in isaac_lab joint order).
 
 
 ## Codebase Structure
