@@ -13,7 +13,7 @@ from diffusion_policy.dataset.base_dataset import BaseLowdimDataset
 from diffusion_policy.model.common.normalizer import LinearNormalizer
 
 # Make src/ importable regardless of working directory
-_src_path = str(pathlib.Path(__file__).parents[4] / "src")
+_src_path = str(pathlib.Path(__file__).parents[3] / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 from dataloader import GrandTourDataloader
