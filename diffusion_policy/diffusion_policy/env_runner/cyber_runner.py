@@ -7,11 +7,6 @@ from diffusion_policy.env_runner.base_runner import BaseLowdimRunner
 
 import zarr, time
 
-from legged_gym.envs import *
-from legged_gym.utils import task_registry
-
-
-
 class LeggedRunner(BaseLowdimRunner):
     def __init__(self,
             output_dir,
@@ -38,8 +33,11 @@ class LeggedRunner(BaseLowdimRunner):
         ):
         super().__init__(output_dir)
 
+        from legged_gym.envs import *
+        from legged_gym.utils import task_registry
+
         self.task = task
-        
+
         env_cfg, train_cfg = task_registry.get_cfgs(name=self.task)
         # override some parameters for testing
         env_cfg.env.num_envs = min(env_cfg.env.num_envs, 50)
