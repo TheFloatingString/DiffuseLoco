@@ -63,6 +63,9 @@ def main(cfg: OmegaConf):
             'seed': ds_cfg.seed,
             'frequency': 100,
         })
+        cfg.task.env_runner = OC.create({
+            '_target_': 'diffusion_policy.env_runner.null_runner.NullRunner',
+        })
 
     cls = hydra.utils.get_class(cfg._target_)
     workspace: BaseWorkspace = cls(cfg)
