@@ -1,0 +1,5 @@
+{
+    "description": "Operator-issued twist command for ANYmal D.",
+    "frame_id": "base",
+    "topic": "anymal_command_twist"
+}

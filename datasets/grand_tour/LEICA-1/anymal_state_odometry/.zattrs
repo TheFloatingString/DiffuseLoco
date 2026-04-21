@@ -1,0 +1,5 @@
+{
+    "description": "ANYmal leg inertial odometry solution.",
+    "frame_id": "odom",
+    "topic": "anymal_state_odometry"
+}
