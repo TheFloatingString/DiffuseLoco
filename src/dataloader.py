@@ -11,13 +11,15 @@ class GrandTourDataloader:
         frequency: int = 100,
         mission_name_short: str = None,
         mission_names: list = None,
+        data_base_path: str = "./data",
     ):
         self.frequency = frequency  # number of samples per second
         self.mission_name_short = mission_name_short
         self.mission_names = mission_names  # List of mission names to load
+        self.data_base_path = data_base_path
 
         # load all mission configs from json
-        with open("data/config.json", "r") as f:
+        with open(f"{data_base_path}/config.json", "r") as f:
             self.mission_configs = json.load(f)
 
         self.isaac_lab_ref_keys_order = [
@@ -133,26 +135,26 @@ class GrandTourDataloader:
 
         # load state odometry timestamps
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_state_odometry/timestamp", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/timestamp", mode="r"
         )
         print(f"anymal_state_odometry timestamps shape:", z.shape)  # shape is (nrows)
         mission_data["odometry_timestamps"] = z[:]
         # load base lin vel from state odometry
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_state_odometry/twist_lin", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/twist_lin", mode="r"
         )
         print(f"base_lin_vel shape:", z.shape)  # shape is (nrows)
         mission_data["raw_base_lin_vel"] = z[:]
         # load base ang vel from state odometry
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_state_odometry/twist_ang", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/twist_ang", mode="r"
         )
         print(f"base_ang_vel shape:", z.shape)  # shape is (nrows)
         mission_data["raw_base_ang_vel"] = z[:]
         # # load projected gravity from state odometry
         # gravity vector from pose_orientation
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_state_odometry/pose_orien", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/pose_orien", mode="r"
         )
         print(f"pose_orientation shape:", z.shape)  # shape is (nrows, 4)
         mission_data["raw_pose_orientation"] = z[:]
@@ -166,7 +168,7 @@ class GrandTourDataloader:
 
         # load timestamps from command twist
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_command_twist/timestamp", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/timestamp", mode="r"
         )
         print(f"anymal_command_twist timestamps shape:", z.shape)  # shape is (nrows)
         mission_data["command_timestamps"] = z[:]
@@ -176,7 +178,7 @@ class GrandTourDataloader:
         print("---")
         # load linear commands from command twist
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_command_twist/linear", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/linear", mode="r"
         )
         print(f"anymal_command_twist linear shape:", z.shape)  # shape is (nrows, 3)
 
@@ -185,7 +187,7 @@ class GrandTourDataloader:
 
         # the 3rd col is yaw from angular velocity commands
         z_angular = zarr.open(
-            f"./data/{mission_name_short}/anymal_command_twist/angular", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/angular", mode="r"
         )
         print(
             f"anymal_command_twist angular shape:", z_angular.shape
@@ -197,7 +199,7 @@ class GrandTourDataloader:
 
         # load timestamps from state actuator
         z = zarr.open(
-            f"./data/{mission_name_short}/anymal_state_actuator/timestamp", mode="r"
+            f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/timestamp", mode="r"
         )
         print(f"anymal_state_actuator timestamps shape:", z.shape)  # shape is (nrows)
         mission_data["actuator_timestamps"] = z[:]
@@ -229,14 +231,14 @@ class GrandTourDataloader:
         keys_ = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]
         for key_idx, joint_name in zip(keys_, grand_tour_ref_keys_order):
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_position",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_position",
                 mode="r",
             )
             mission_data["raw_joint_pos"][joint_name] = z[:]
             print(f"{joint_name} {key_idx}: joint_position shape:", z.shape)
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_velocity",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_velocity",
                 mode="r",
             )
             mission_data["raw_joint_vel"][joint_name] = z[:]
@@ -244,43 +246,43 @@ class GrandTourDataloader:
 
             # load command fields from state actuator
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_mode",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_mode",
                 mode="r",
             )
             mission_data["raw_command_mode"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_position",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_position",
                 mode="r",
             )
             mission_data["raw_command_position"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_velocity",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_velocity",
                 mode="r",
             )
             mission_data["raw_command_velocity"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_joint_torque",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_joint_torque",
                 mode="r",
             )
             mission_data["raw_command_joint_torque"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_d",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_d",
                 mode="r",
             )
             mission_data["raw_command_pid_gains_d"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_i",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_i",
                 mode="r",
             )
             mission_data["raw_command_pid_gains_i"][joint_name] = z[:]
 
             z = zarr.open(
-                f"./data/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_p",
+                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_p",
                 mode="r",
             )
             mission_data["raw_command_pid_gains_p"][joint_name] = z[:]
