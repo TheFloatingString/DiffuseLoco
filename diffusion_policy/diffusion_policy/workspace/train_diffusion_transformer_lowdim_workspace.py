@@ -263,7 +263,8 @@ class TrainDiffusionTransformerLowdimWorkspace(BaseWorkspace):
                         #     del pred_action
                         #     del mse
                         # del dataset
-                        shutil.rmtree(filename)
+                        if filename:
+                            shutil.rmtree(filename)
 
                 # run validation
                 if (self.epoch % cfg.training.val_every) == 0:
