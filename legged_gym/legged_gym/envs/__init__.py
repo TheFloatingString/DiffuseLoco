@@ -55,3 +55,4 @@ task_registry.register("cyber2_stand", CyberStandDanceEnv, CyberStandDanceConfig
 task_registry.register("cyber2_hop", CyberWalkEnv, CyberWalkConfig(), CyberWalkCfgPPO())
 task_registry.register("cyber2_bounce", CyberWalkEnv, CyberWalkConfig(), CyberWalkCfgPPO())
 task_registry.register("cyber2_walk", CyberWalkEnv, CyberWalkConfig(), CyberWalkCfgPPO())
+task_registry.register("cyber2_trot", CyberWalkEnv, CyberWalkConfig(), CyberWalkCfgPPO())

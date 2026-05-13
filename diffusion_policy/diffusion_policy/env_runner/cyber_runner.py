@@ -71,7 +71,8 @@ class LeggedRunner(BaseLowdimRunner):
         obs, _ = env.reset()
         
         if not online:
-            expert_policy = torch.load('source_ckpts/{}.pt'.format(self.task), map_location=torch.device('cpu'))
+            ckpt_name = self.task.removeprefix("cyber2_")
+            expert_policy = torch.load('source_ckpts/{}.pt'.format(ckpt_name), map_location=torch.device('cpu'))
             expert_policy = expert_policy.to(device)
 
         pbar = tqdm.tqdm(total=self.max_steps, desc=f"Eval IsaacGym", 
