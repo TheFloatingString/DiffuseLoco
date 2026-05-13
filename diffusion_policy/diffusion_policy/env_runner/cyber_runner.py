@@ -5,6 +5,9 @@ import tqdm
 from diffusion_policy.policy.base_policy import BaseLowdimPolicy
 from diffusion_policy.env_runner.base_runner import BaseLowdimRunner
 
+from legged_gym.envs import *
+from legged_gym.utils import task_registry
+
 import zarr, time
 
 class LeggedRunner(BaseLowdimRunner):
@@ -32,9 +35,6 @@ class LeggedRunner(BaseLowdimRunner):
             device=None,
         ):
         super().__init__(output_dir)
-
-        from legged_gym.envs import *
-        from legged_gym.utils import task_registry
 
         self.task = task
 
