@@ -71,7 +71,7 @@ class LeggedRunner(BaseLowdimRunner):
         obs, _ = env.reset()
         
         if not online:
-            ckpt_name = self.task.removeprefix("cyber2_")
+            ckpt_name = self.task[len("cyber2_"):] if self.task.startswith("cyber2_") else self.task
             expert_policy = torch.load('source_ckpts/{}.pt'.format(ckpt_name), map_location=torch.device('cpu'))
             expert_policy = expert_policy.to(device)
 
