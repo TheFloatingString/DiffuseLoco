@@ -164,6 +164,22 @@ Then, use `scripts/combine_dataset.py` to combine the generated datasets (`skill
 
 After that, you can use `scripts/train.py` to train the diffusion model.
 
+### Training on different datasets
+
+You can select the input dataset using the `--ds` flag:
+
+**1. Train on Grand Tour dataset:**
+```bash
+python scripts/train.py --ds grand_tour
+```
+This will use missions defined in `datasets/grand_tour` with 36-dim observations.
+
+**2. Train on IsaacLab generated data (CSV):**
+```bash
+python scripts/train.py --ds isaaclab
+```
+This expects CSV files in `../grand_tour_code/generated_data`.
+
 **NOTE**:
 - Looks like only `cyber2_stand.pt` source RL policy available for now.
 - Names of datasets should be adapted in `scripts/combine_dataset.py` and `diffusion_policy/config_files/cyber_diffusion_policy_medium_model.yaml`.
