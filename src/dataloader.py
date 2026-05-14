@@ -8,10 +8,10 @@ import json
 class GrandTourDataloader:
     def __init__(
         self,
-        frequency: int = 100,
+        frequency: int = 30,
         mission_name_short: str = None,
         mission_names: list = None,
-        data_base_path: str = "./data",
+        data_base_path: str = "data",
     ):
         self.frequency = frequency  # number of samples per second
         self.mission_name_short = mission_name_short
@@ -19,7 +19,7 @@ class GrandTourDataloader:
         self.data_base_path = data_base_path
 
         # load all mission configs from json
-        with open(f"{data_base_path}/config.json", "r") as f:
+        with open(f"{self.data_base_path}/config.json", "r") as f:
             self.mission_configs = json.load(f)
 
         self.isaac_lab_ref_keys_order = [
@@ -129,6 +129,7 @@ class GrandTourDataloader:
             "adj_velocity_commands": [],
             "adj_joint_pos": dict(),
             "adj_joint_vel": dict(),
+            "adj_command_position": dict(),
         }
 
         mission_data = self.missions_data[mission_name_short]
@@ -329,6 +330,7 @@ class GrandTourDataloader:
                 if joint_name not in mission_data["adj_joint_pos"]:
                     mission_data["adj_joint_pos"][joint_name] = []
                     mission_data["adj_joint_vel"][joint_name] = []
+                    mission_data["adj_command_position"][joint_name] = []
                 closest_idx = self.get_closest_value_from_timestamp(
                     timestamp, mission_data["actuator_timestamps"]
                 )
@@ -337,6 +339,9 @@ class GrandTourDataloader:
                 )
                 mission_data["adj_joint_vel"][joint_name].append(
                     mission_data["raw_joint_vel"][joint_name][closest_idx]
+                )
+                mission_data["adj_command_position"][joint_name].append(
+                    mission_data["raw_command_position"][joint_name][closest_idx]
                 )
 
         # convert to numpy arrays
@@ -354,6 +359,9 @@ class GrandTourDataloader:
             )
             mission_data["adj_joint_vel"][joint_name] = np.array(
                 mission_data["adj_joint_vel"][joint_name]
+            )
+            mission_data["adj_command_position"][joint_name] = np.array(
+                mission_data["adj_command_position"][joint_name]
             )
 
         print("adj_base_lin_vel shape:", mission_data["adj_base_lin_vel"].shape)
@@ -378,6 +386,7 @@ class GrandTourDataloader:
         combined_adj_velocity_commands = []
         combined_adj_joint_pos = {joint: [] for joint in self.isaac_lab_ref_keys_order}
         combined_adj_joint_vel = {joint: [] for joint in self.isaac_lab_ref_keys_order}
+        combined_adj_command_position = {joint: [] for joint in self.isaac_lab_ref_keys_order}
 
         # Store mission boundaries for proper observation/action handling
         mission_boundaries = []
@@ -400,6 +409,9 @@ class GrandTourDataloader:
                 combined_adj_joint_vel[joint_name].extend(
                     mission_data["adj_joint_vel"][joint_name]
                 )
+                combined_adj_command_position[joint_name].extend(
+                    mission_data["adj_command_position"][joint_name]
+                )
 
             # Record mission boundaries: [start_idx, end_idx] inclusive
             mission_boundaries.append(
@@ -420,6 +432,10 @@ class GrandTourDataloader:
             },
             "adj_joint_vel": {
                 joint: np.array(combined_adj_joint_vel[joint])
+                for joint in self.isaac_lab_ref_keys_order
+            },
+            "adj_command_position": {
+                joint: np.array(combined_adj_command_position[joint])
                 for joint in self.isaac_lab_ref_keys_order
             },
             "mission_boundaries": mission_boundaries,
@@ -575,16 +591,16 @@ class GrandTourDataloader:
             if mission_name not in self.missions_data:
                 raise ValueError(f"Mission '{mission_name}' not found")
             data = self.missions_data[mission_name]
-            joint_pos_array = np.column_stack(
+            cmd_pos_array = np.column_stack(
                 [
-                    data["adj_joint_pos"][joint_name]
+                    data["adj_command_position"][joint_name]
                     for joint_name in self.isaac_lab_ref_keys_order
                 ]
             )
             if shift_by_one:
-                return joint_pos_array[1:]  # shifted by one timestep for training
+                return cmd_pos_array[1:]  # shifted by one timestep for training
             else:
-                return joint_pos_array  # no shift for reference tracking
+                return cmd_pos_array[:-1]  # no shift, but trim to match obs length (N-1)
         elif self.combined_data is not None:
             # For combined data, return actions respecting mission boundaries
             all_actions = []
@@ -592,28 +608,34 @@ class GrandTourDataloader:
                 # Get data for this mission segment
                 mission_slice = slice(start_idx, end_idx + 1)
 
-                # Collect joint positions for this mission
-                joint_pos_array = np.column_stack(
+                # Collect command positions for this mission
+                cmd_pos_array = np.column_stack(
                     [
-                        self.combined_data["adj_joint_pos"][joint_name][mission_slice]
+                        self.combined_data["adj_command_position"][joint_name][mission_slice]
                         for joint_name in self.isaac_lab_ref_keys_order
                     ]
                 )
 
-                # Return 1 to n for this mission (exclude first timestep)
-                all_actions.append(joint_pos_array[1:])
+                # Return shifted or trimmed to match obs length
+                if shift_by_one:
+                    all_actions.append(cmd_pos_array[1:])
+                else:
+                    all_actions.append(cmd_pos_array[:-1])
 
             # Concatenate all mission actions
             return np.concatenate(all_actions, axis=0)
         elif self.mission_name_short:
             data = self.missions_data[self.mission_name_short]
-            joint_pos_array = np.column_stack(
+            cmd_pos_array = np.column_stack(
                 [
-                    data["adj_joint_pos"][joint_name]
+                    data["adj_command_position"][joint_name]
                     for joint_name in self.isaac_lab_ref_keys_order
                 ]
             )
-            return joint_pos_array[1:]  # shifted by one timestep
+            if shift_by_one:
+                return cmd_pos_array[1:]
+            else:
+                return cmd_pos_array[:-1]
         else:
             raise ValueError("No data available. Load missions first.")
 
@@ -699,11 +721,12 @@ if __name__ == "__main__":
     # Observations and actions
     plt.subplot(2, 1, 2)
     plt.plot(obs[:, 12], label="Observation (joint pos)")
-    plt.plot(act[:, 0], label="Action (joint pos)")
+    plt.plot(act[:, 0], label="Action (commanded pos)")
     plt.legend()
     plt.title("Observations vs Actions")
     plt.xlabel("Timestep")
     plt.ylabel("Value")
+    plt.xlim(0, 1000)
 
     plt.tight_layout()
     plt.savefig("velocity_command.png")
@@ -711,4 +734,3 @@ if __name__ == "__main__":
 
     print("observations shape:", obs.shape)
     print("actions shape:", act.shape)
-
