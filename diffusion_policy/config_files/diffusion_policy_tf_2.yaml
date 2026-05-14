@@ -5,7 +5,7 @@ checkpoint:
   save_last_snapshot: false
   topk:
     format_str: epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt
-    k: 5
+    k: 30
     mode: max
     monitor_key: test_mean_score
 dataloader:
@@ -52,7 +52,7 @@ optimizer:
   weight_decay: 0.001
 past_action_visible: false
 policy:
-  _target_: diffusion_policy.policy.diffusion_transformer_policy.DiffusionTransformerLowdimPolicy
+  _target_: diffusion_policy.policy.diffusion_transformer_lowdim_policy.DiffusionTransformerLowdimPolicy
   action_dim: 12
   horizon: 16
   model:
@@ -121,7 +121,7 @@ task:
   obs_dim: 42
 task_name: legged_lowdim
 training:
-  checkpoint_every: 10
+  checkpoint_every: 50
   debug: false
   device: cuda:0
   gradient_accumulate_every: 1

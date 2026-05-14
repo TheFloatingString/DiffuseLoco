@@ -82,11 +82,6 @@
         "offset_start_unix_absolute": 1730732750.7217784,
         "offset_end_unix_absolute": 1730733155.7217567
     },
-    "RIV-1": {
-        "timestamp_label": "2024-11-04-16-52-38",
-        "offset_start_unix_absolute": 0.0,
-        "offset_end_unix_absolute": 0.0
-    },
     "PIL-1": {
         "timestamp_label": "2024-11-11-12-07-40",
         "offset_start_unix_absolute": 1731323279.776792,
