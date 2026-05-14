@@ -1,10 +1,11 @@
 import copy
 import pathlib
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import torch
+from omegaconf import ListConfig
 
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.common.replay_buffer import ReplayBuffer
@@ -18,6 +19,7 @@ if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 from dataloader import GrandTourDataloader
 
+# TODO: check whether desired joint pos should be sampled at timestemp t or t+1
 
 class GrandTourDataset(BaseLowdimDataset):
     """
@@ -36,19 +38,24 @@ class GrandTourDataset(BaseLowdimDataset):
         pad_after: int = 0,
         val_ratio: float = 0.0,
         seed: int = 42,
-        frequency: int = 100,
+        frequency: int = 30,
         mission_names: Optional[List[str]] = None,
     ):
         super().__init__()
 
-        dataset_path = pathlib.Path(dataset_path)
-        data_base_path = str(dataset_path.parent)
-        mission_name_short = dataset_path.name
+        if isinstance(dataset_path, (list, tuple, ListConfig)):
+            dataset_paths = [pathlib.Path(str(p)) for p in dataset_path]
+            data_base_path = str(dataset_paths[0].parent)
+            derived_mission_names = [p.name for p in dataset_paths]
+        else:
+            dataset_path = pathlib.Path(str(dataset_path))
+            data_base_path = str(dataset_path.parent)
+            derived_mission_names = [dataset_path.name]
 
         loader = GrandTourDataloader(
             frequency=frequency,
-            mission_name_short=mission_name_short if mission_names is None else None,
-            mission_names=mission_names,
+            mission_name_short=None,
+            mission_names=mission_names if mission_names is not None else derived_mission_names,
             data_base_path=data_base_path,
         )
 
@@ -57,7 +64,7 @@ class GrandTourDataset(BaseLowdimDataset):
         missions = list(loader.missions_data.keys())
         for mission in missions:
             obs = loader.get_observations_isaac_lab_format(mission_name=mission)
-            action = loader.get_actions_isaac_lab_format(mission_name=mission, shift_by_one=True)
+            action = loader.get_actions_isaac_lab_format(mission_name=mission, shift_by_one=False) # TODO: can be changed if needed
             # obs and action are both (N-1, D); treat the full mission as one episode
             replay_buffer.add_episode({"obs": obs.astype(np.float32), "action": action.astype(np.float32)})
 
