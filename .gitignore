@@ -93,3 +93,8 @@ _wandb
 fuse.cfg
 
 *.ai
+
+## UPDATES
+datasets
+isaacgym
+.env
