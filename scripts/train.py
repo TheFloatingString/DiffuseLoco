@@ -14,6 +14,7 @@ sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('--ds', default='default', choices=['default', 'grand_tour', 'isaaclab'],
                     help='Dataset selection')
+parser.add_argument('--grand_tour_goal_cond', action='store_true', help='Enable goal conditioning for grand_tour dataset')
 args, remaining_argv = parser.parse_known_args()
 sys.argv = [sys.argv[0]] + remaining_argv
 
@@ -94,6 +95,13 @@ def main(cfg: OmegaConf):
         # hold-out mission for per-epoch RMSE validation
         with open_dict(cfg.task):
             cfg.task.grand_tour_val_mission = val_mission
+
+        if args.grand_tour_goal_cond:
+            with open_dict(cfg.policy.model):
+                cfg.policy.model.separate_goal_conditioning = True
+                cfg.policy.model.goal_indices = [9, 10, 11]
+            # Ensure cond_dim matches obs_dim (already set to 36 above)
+            cfg.policy.model.cond_dim = 36
 
     # --- IsaacLab generated data handler ---
     elif args.ds == 'isaaclab':

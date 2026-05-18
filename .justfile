@@ -14,6 +14,9 @@ generate_trot_data:
 train_grand_tour:
     WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour
 
+train_grand_tour_goal_conditioning:
+    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour --grand_tour_goal_cond
+
 train_isaaclab:
     #!/bin/bash
     conda activate diffuseloco
