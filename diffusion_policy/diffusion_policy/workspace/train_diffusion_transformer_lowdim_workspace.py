@@ -94,6 +94,9 @@ class TrainDiffusionTransformerLowdimWorkspace(BaseWorkspace):
                 pad_after=cfg.task.dataset.pad_after,
                 val_ratio=0.0,
                 seed=cfg.task.dataset.seed,
+                frequency=cfg.task.dataset.get('frequency', 30),
+                upsample_factor=cfg.task.dataset.get('upsample_factor', 1),
+                offset=cfg.task.dataset.get('offset', 0),
             )
             grand_tour_val_dataloader = DataLoader(_gt_val_ds, **cfg.val_dataloader)
 

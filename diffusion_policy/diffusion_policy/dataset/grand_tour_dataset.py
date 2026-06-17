@@ -40,6 +40,8 @@ class GrandTourDataset(BaseLowdimDataset):
         seed: int = 42,
         frequency: int = 30,
         mission_names: Optional[List[str]] = None,
+        upsample_factor: int = 1,
+        offset: int = 0,
     ):
         super().__init__()
 
@@ -57,6 +59,7 @@ class GrandTourDataset(BaseLowdimDataset):
             mission_name_short=None,
             mission_names=mission_names if mission_names is not None else derived_mission_names,
             data_base_path=data_base_path,
+            upsample_factor=upsample_factor,
         )
 
         # Build an in-memory ReplayBuffer; each mission becomes one episode
@@ -66,6 +69,15 @@ class GrandTourDataset(BaseLowdimDataset):
             obs = loader.get_observations_isaac_lab_format(mission_name=mission)
             action = loader.get_actions_isaac_lab_format(mission_name=mission, shift_by_one=False) # TODO: can be changed if needed
             # obs and action are both (N-1, D); treat the full mission as one episode
+            
+            # Apply offset shift
+            if offset > 0:
+                obs = obs[:-offset]
+                action = action[offset:]
+            elif offset < 0:
+                obs = obs[-offset:]
+                action = action[:offset]
+
             replay_buffer.add_episode({"obs": obs.astype(np.float32), "action": action.astype(np.float32)})
 
         val_mask = get_val_mask(
@@ -87,6 +99,15 @@ class GrandTourDataset(BaseLowdimDataset):
         self.horizon = horizon
         self.pad_before = pad_before
         self.pad_after = pad_after
+
+        obs_shape = replay_buffer["obs"].shape
+        act_shape = replay_buffer["action"].shape
+        print(
+            f"\n[GrandTourDataset] {replay_buffer.n_episodes} episodes loaded\n"
+            f"  obs    {obs_shape}  dtype={replay_buffer['obs'].dtype}\n"
+            f"  action {act_shape}  dtype={replay_buffer['action'].dtype}\n"
+            f"  train samples (horizon={horizon}): {len(self.sampler)}\n"
+        )
 
     def get_validation_dataset(self):
         val_set = copy.copy(self)

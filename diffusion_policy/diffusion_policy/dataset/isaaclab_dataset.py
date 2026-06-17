@@ -38,6 +38,7 @@ class IsaacLabDataset(BaseLowdimDataset):
         seed: int = 42,
         obs_key: str = "obs",
         action_key: str = "action",
+        offset: int = 0,
     ):
         super().__init__()
 
@@ -74,8 +75,29 @@ class IsaacLabDataset(BaseLowdimDataset):
             mask = env_ids == env_id
             env_obs = obs[mask]
             env_action = action[mask]
+            env_dones = dones[mask]
+            if offset > 0:
+                env_obs = env_obs[:-offset]
+                env_action = env_action[offset:]
+                env_dones = env_dones[:-offset]
+            elif offset < 0:
+                env_obs = env_obs[-offset:]
+                env_action = env_action[:offset]
+                env_dones = env_dones[-offset:]
             # episode ends where done==1 or at the last step of this robot's data
-            replay_buffer.add_episode({obs_key: env_obs, action_key: env_action})
+            start_idx = 0
+            for i in range(len(env_dones)):
+                if env_dones[i] == 1:
+                    ep_obs = env_obs[start_idx : i + 1]
+                    ep_action = env_action[start_idx : i + 1]
+                    if len(ep_obs) > 0:
+                        replay_buffer.add_episode({obs_key: ep_obs, action_key: ep_action})
+                    start_idx = i + 1
+            if start_idx < len(env_dones):
+                ep_obs = env_obs[start_idx:]
+                ep_action = env_action[start_idx:]
+                if len(ep_obs) > 0:
+                    replay_buffer.add_episode({obs_key: ep_obs, action_key: ep_action})
 
         val_mask = get_val_mask(
             n_episodes=replay_buffer.n_episodes,

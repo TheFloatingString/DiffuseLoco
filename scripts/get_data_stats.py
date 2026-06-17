@@ -27,6 +27,7 @@ PRESETS = {
 parser = argparse.ArgumentParser()
 parser.add_argument("--preset", default="flat_mix", choices=list(PRESETS.keys()))
 parser.add_argument("--frequency", type=int, default=30)
+parser.add_argument("--upsample-factor", type=int, default=1)
 parser.add_argument("--val-mission", default="SPX-2")
 args = parser.parse_args()
 
@@ -62,6 +63,7 @@ loader = GrandTourDataloader(
     mission_name_short=None,
     mission_names=selected_missions,
     data_base_path=str(data_base),  
+    upsample_factor=args.upsample_factor,
 )
 
 total_obs_samples = 0

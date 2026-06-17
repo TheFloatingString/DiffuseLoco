@@ -12,11 +12,13 @@ class GrandTourDataloader:
         mission_name_short: str = None,
         mission_names: list = None,
         data_base_path: str = "data",
+        upsample_factor: int = 1,
     ):
         self.frequency = frequency  # number of samples per second
         self.mission_name_short = mission_name_short
         self.mission_names = mission_names  # List of mission names to load
         self.data_base_path = data_base_path
+        self.upsample_factor = upsample_factor
 
         # load all mission configs from json
         with open(f"{self.data_base_path}/config.json", "r") as f:
@@ -96,6 +98,28 @@ class GrandTourDataloader:
             ]
         )
 
+    @staticmethod
+    def quat_rotate_inverse_xyzw(q: np.ndarray, v: np.ndarray) -> np.ndarray:
+        """Rotate vector(s) v by the inverse of quaternion(s) q.
+
+        ANYmal zarr data stores quaternions as [x, y, z, w] (ROS convention).
+        Matches the quat_rotate_inverse implementation in build_dataset.py.
+
+        Args:
+            q: (N, 4) quaternions in [x, y, z, w] format
+            v: (N, 3) or (3,) vectors to rotate
+        Returns:
+            (N, 3) rotated vectors
+        """
+        q_vec = q[:, :3]   # (x, y, z)
+        q_w = q[:, 3]      # w
+        if v.ndim == 1:
+            v = np.tile(v, (len(q), 1))
+        a = v * (2.0 * q_w[:, None] ** 2 - 1.0)
+        b = 2.0 * q_w[:, None] * np.cross(q_vec, v)
+        c = 2.0 * q_vec * np.sum(q_vec * v, axis=-1, keepdims=True)
+        return a - b + c
+
     def load_all_missions(self):
         """Load data for all missions in config.json"""
         for mission_name in self.mission_configs:
@@ -105,275 +129,140 @@ class GrandTourDataloader:
 
     def load_single_mission(self, mission_name_short):
         """Load data for a single mission"""
-        # Initialize data storage for this mission
-        self.missions_data[mission_name_short] = {
+        # Load raw data once
+        raw_data = {
             "offset_start_unix_absolute": self.mission_configs[mission_name_short][
                 "offset_start_unix_absolute"
             ],
             "offset_end_unix_absolute": self.mission_configs[mission_name_short][
                 "offset_end_unix_absolute"
             ],
-            "raw_state_odometry_timestamps": None,
-            "raw_command_timestamps": None,
-            "raw_actuator_timestamps": None,
-            "raw_base_lin_vel": None,
-            "raw_base_ang_vel": None,
-            "raw_projected_gravity": None,
-            "raw_velocity_commands": None,
-            "raw_joint_pos": dict(),
-            "raw_joint_vel": dict(),
-            "absolute_timestamps": [],
-            "adj_base_lin_vel": [],
-            "adj_base_ang_vel": [],
-            "adj_projected_gravity": [],
-            "adj_velocity_commands": [],
-            "adj_joint_pos": dict(),
-            "adj_joint_vel": dict(),
-            "adj_command_position": dict(),
         }
-
-        mission_data = self.missions_data[mission_name_short]
 
         # load state odometry timestamps
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/timestamp", mode="r"
         )
-        print(f"anymal_state_odometry timestamps shape:", z.shape)  # shape is (nrows)
-        mission_data["odometry_timestamps"] = z[:]
+        raw_data["odometry_timestamps"] = z[:]
         # load base lin vel from state odometry
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/twist_lin", mode="r"
         )
-        print(f"base_lin_vel shape:", z.shape)  # shape is (nrows)
-        mission_data["raw_base_lin_vel"] = z[:]
+        raw_data["raw_base_lin_vel"] = z[:]
         # load base ang vel from state odometry
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/twist_ang", mode="r"
         )
-        print(f"base_ang_vel shape:", z.shape)  # shape is (nrows)
-        mission_data["raw_base_ang_vel"] = z[:]
-        # # load projected gravity from state odometry
-        # gravity vector from pose_orientation
+        raw_data["raw_base_ang_vel"] = z[:]
+        # load pose orientation
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_state_odometry/pose_orien", mode="r"
         )
-        print(f"pose_orientation shape:", z.shape)  # shape is (nrows, 4)
-        mission_data["raw_pose_orientation"] = z[:]
-        # convert quaternion to rotation matrix and get gravity vector
-        mission_data["raw_projected_gravity"] = np.array(
-            [
-                self.quaternion_to_rotation_matrix(q)[:3, 2]
-                for q in mission_data["raw_pose_orientation"]
-            ]
+        raw_data["raw_pose_orientation"] = z[:]
+        # pose_orien is stored as [x, y, z, w] (ROS convention)
+        # Gravity [0,0,-1] rotated to body frame matches IsaacLab's projected_gravity_b.
+        quats = raw_data["raw_pose_orientation"]  # (N, 4) [x,y,z,w]
+        raw_data["raw_projected_gravity"] = self.quat_rotate_inverse_xyzw(
+            quats, np.array([0.0, 0.0, -1.0])
         )
 
         # load timestamps from command twist
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/timestamp", mode="r"
         )
-        print(f"anymal_command_twist timestamps shape:", z.shape)  # shape is (nrows)
-        mission_data["command_timestamps"] = z[:]
-        print("---")
-        print(f"min command_timestamps: {mission_data['command_timestamps'].min()}")
-        print(f"max command_timestamps: {mission_data['command_timestamps'].max()}")
-        print("---")
+        raw_data["command_timestamps"] = z[:]
         # load linear commands from command twist
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/linear", mode="r"
         )
-        print(f"anymal_command_twist linear shape:", z.shape)  # shape is (nrows, 3)
-
-        # Copy to numpy array so we can modify it (zarr is read-only)
         velocity_commands = z[:]  # Copy to numpy array
-
         # the 3rd col is yaw from angular velocity commands
         z_angular = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_command_twist/angular", mode="r"
         )
-        print(
-            f"anymal_command_twist angular shape:", z_angular.shape
-        )  # shape is (nrows, 3)
-
         velocity_commands[:, 2] = z_angular[:, 2]
-
-        mission_data["raw_velocity_commands"] = velocity_commands
+        raw_data["raw_velocity_commands"] = velocity_commands
 
         # load timestamps from state actuator
         z = zarr.open(
             f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/timestamp", mode="r"
         )
-        print(f"anymal_state_actuator timestamps shape:", z.shape)  # shape is (nrows)
-        mission_data["actuator_timestamps"] = z[:]
+        raw_data["actuator_timestamps"] = z[:]
 
-        # load command fields from state actuator (stored as raw state)
-        mission_data["raw_command_mode"] = dict()
-        mission_data["raw_command_position"] = dict()
-        mission_data["raw_command_velocity"] = dict()
-        mission_data["raw_command_joint_torque"] = dict()
-        mission_data["raw_command_pid_gains_d"] = dict()
-        mission_data["raw_command_pid_gains_i"] = dict()
-        mission_data["raw_command_pid_gains_p"] = dict()
-
+        # load joint data
+        raw_data["raw_joint_pos"] = dict()
+        raw_data["raw_joint_vel"] = dict()
+        raw_data["raw_command_position"] = dict()
+        
         grand_tour_ref_keys_order = [
-            "LF_HAA",
-            "LF_HFE",
-            "LF_KFE",
-            "RF_HAA",
-            "RF_HFE",
-            "RF_KFE",
-            "LH_HAA",
-            "LH_HFE",
-            "LH_KFE",
-            "RH_HAA",
-            "RH_HFE",
-            "RH_KFE",
+            "LF_HAA", "LF_HFE", "LF_KFE", "RF_HAA", "RF_HFE", "RF_KFE",
+            "LH_HAA", "LH_HFE", "LH_KFE", "RH_HAA", "RH_HFE", "RH_KFE",
         ]
-
         keys_ = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"]
         for key_idx, joint_name in zip(keys_, grand_tour_ref_keys_order):
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_position",
-                mode="r",
-            )
-            mission_data["raw_joint_pos"][joint_name] = z[:]
-            print(f"{joint_name} {key_idx}: joint_position shape:", z.shape)
+            z = zarr.open(f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_position", mode="r")
+            raw_data["raw_joint_pos"][joint_name] = z[:]
+            z = zarr.open(f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_velocity", mode="r")
+            raw_data["raw_joint_vel"][joint_name] = z[:]
+            z = zarr.open(f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_position", mode="r")
+            raw_data["raw_command_position"][joint_name] = z[:]
 
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_state_joint_velocity",
-                mode="r",
-            )
-            mission_data["raw_joint_vel"][joint_name] = z[:]
-            print(f"{joint_name} {key_idx}: joint_velocity shape:", z.shape)
+        # Process data for each offset
+        for k in range(self.upsample_factor):
+            mission_key = f"{mission_name_short}_off{k}" if self.upsample_factor > 1 else mission_name_short
+            
+            # Start with offset = k / (f * upsample_factor)
+            # This ensures that we take samples between the original f-Hz samples
+            time_offset = k * (1.0 / (self.frequency * self.upsample_factor))
+            
+            self.missions_data[mission_key] = {
+                "offset_start_unix_absolute": raw_data["offset_start_unix_absolute"],
+                "offset_end_unix_absolute": raw_data["offset_end_unix_absolute"],
+                "absolute_timestamps": [],
+                "adj_base_lin_vel": [],
+                "adj_base_ang_vel": [],
+                "adj_projected_gravity": [],
+                "adj_velocity_commands": [],
+                "adj_joint_pos": {joint: [] for joint in grand_tour_ref_keys_order},
+                "adj_joint_vel": {joint: [] for joint in grand_tour_ref_keys_order},
+                "adj_command_position": {joint: [] for joint in grand_tour_ref_keys_order},
+            }
+            mission_data = self.missions_data[mission_key]
 
-            # load command fields from state actuator
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_mode",
-                mode="r",
-            )
-            mission_data["raw_command_mode"][joint_name] = z[:]
+            n_samples = int(self.frequency * (raw_data["offset_end_unix_absolute"] - raw_data["offset_start_unix_absolute"]))
+            
+            for i in range(n_samples):
+                timestamp = raw_data["offset_start_unix_absolute"] + time_offset + i / self.frequency
+                
+                # find closest timestamp for odometry
+                closest_idx = self.get_closest_value_from_timestamp(timestamp, raw_data["odometry_timestamps"])
+                mission_data["absolute_timestamps"].append(timestamp)
+                mission_data["adj_base_lin_vel"].append(raw_data["raw_base_lin_vel"][closest_idx])
+                mission_data["adj_base_ang_vel"].append(raw_data["raw_base_ang_vel"][closest_idx])
+                mission_data["adj_projected_gravity"].append(raw_data["raw_projected_gravity"][closest_idx])
 
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_position",
-                mode="r",
-            )
-            mission_data["raw_command_position"][joint_name] = z[:]
+                # find closest timestamp for command twist
+                closest_idx = self.get_closest_value_from_timestamp(timestamp, raw_data["command_timestamps"])
+                mission_data["adj_velocity_commands"].append(raw_data["raw_velocity_commands"][closest_idx])
 
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_velocity",
-                mode="r",
-            )
-            mission_data["raw_command_velocity"][joint_name] = z[:]
+                # find closest timestamp for joints
+                closest_idx = self.get_closest_value_from_timestamp(timestamp, raw_data["actuator_timestamps"])
+                for joint_name in grand_tour_ref_keys_order:
+                    mission_data["adj_joint_pos"][joint_name].append(raw_data["raw_joint_pos"][joint_name][closest_idx])
+                    mission_data["adj_joint_vel"][joint_name].append(raw_data["raw_joint_vel"][joint_name][closest_idx])
+                    mission_data["adj_command_position"][joint_name].append(raw_data["raw_command_position"][joint_name][closest_idx])
 
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_joint_torque",
-                mode="r",
-            )
-            mission_data["raw_command_joint_torque"][joint_name] = z[:]
-
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_d",
-                mode="r",
-            )
-            mission_data["raw_command_pid_gains_d"][joint_name] = z[:]
-
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_i",
-                mode="r",
-            )
-            mission_data["raw_command_pid_gains_i"][joint_name] = z[:]
-
-            z = zarr.open(
-                f"{self.data_base_path}/{mission_name_short}/anymal_state_actuator/{key_idx}_command_pid_gains_p",
-                mode="r",
-            )
-            mission_data["raw_command_pid_gains_p"][joint_name] = z[:]
-
-        # process data based on frequency and closest timestamps
-        for i in range(
-            int(
-                self.frequency
-                * (
-                    mission_data["offset_end_unix_absolute"]
-                    - mission_data["offset_start_unix_absolute"]
-                )
-            )
-        ):
-            timestamp = mission_data["offset_start_unix_absolute"] + i / self.frequency
-            if i % 10000 == 0:
-                print(f"timestamp: {timestamp}")
-
-            # find closest timestamp for odometry
-            closest_idx = self.get_closest_value_from_timestamp(
-                timestamp, mission_data["odometry_timestamps"]
-            )
-            mission_data["absolute_timestamps"].append(timestamp)
-            mission_data["adj_base_lin_vel"].append(
-                mission_data["raw_base_lin_vel"][closest_idx]
-            )
-            mission_data["adj_base_ang_vel"].append(
-                mission_data["raw_base_ang_vel"][closest_idx]
-            )
-            mission_data["adj_projected_gravity"].append(
-                mission_data["raw_projected_gravity"][closest_idx]
-            )
-
-            # find closest timestamp for command twist
-            closest_idx = self.get_closest_value_from_timestamp(
-                timestamp, mission_data["command_timestamps"]
-            )
-            mission_data["adj_velocity_commands"].append(
-                mission_data["raw_velocity_commands"][closest_idx]
-            )
-
-            # find closest timestamp for joint positions and velocities
+            # convert to numpy arrays
+            mission_data["adj_base_lin_vel"] = np.array(mission_data["adj_base_lin_vel"])
+            mission_data["adj_base_ang_vel"] = np.array(mission_data["adj_base_ang_vel"])
+            mission_data["adj_projected_gravity"] = np.array(mission_data["adj_projected_gravity"])
+            mission_data["adj_velocity_commands"] = np.array(mission_data["adj_velocity_commands"])
             for joint_name in grand_tour_ref_keys_order:
-                if joint_name not in mission_data["adj_joint_pos"]:
-                    mission_data["adj_joint_pos"][joint_name] = []
-                    mission_data["adj_joint_vel"][joint_name] = []
-                    mission_data["adj_command_position"][joint_name] = []
-                closest_idx = self.get_closest_value_from_timestamp(
-                    timestamp, mission_data["actuator_timestamps"]
-                )
-                mission_data["adj_joint_pos"][joint_name].append(
-                    mission_data["raw_joint_pos"][joint_name][closest_idx]
-                )
-                mission_data["adj_joint_vel"][joint_name].append(
-                    mission_data["raw_joint_vel"][joint_name][closest_idx]
-                )
-                mission_data["adj_command_position"][joint_name].append(
-                    mission_data["raw_command_position"][joint_name][closest_idx]
-                )
+                mission_data["adj_joint_pos"][joint_name] = np.array(mission_data["adj_joint_pos"][joint_name])
+                mission_data["adj_joint_vel"][joint_name] = np.array(mission_data["adj_joint_vel"][joint_name])
+                mission_data["adj_command_position"][joint_name] = np.array(mission_data["adj_command_position"][joint_name])
 
-        # convert to numpy arrays
-        mission_data["adj_base_lin_vel"] = np.array(mission_data["adj_base_lin_vel"])
-        mission_data["adj_base_ang_vel"] = np.array(mission_data["adj_base_ang_vel"])
-        mission_data["adj_projected_gravity"] = np.array(
-            mission_data["adj_projected_gravity"]
-        )
-        mission_data["adj_velocity_commands"] = np.array(
-            mission_data["adj_velocity_commands"]
-        )
-        for joint_name in grand_tour_ref_keys_order:
-            mission_data["adj_joint_pos"][joint_name] = np.array(
-                mission_data["adj_joint_pos"][joint_name]
-            )
-            mission_data["adj_joint_vel"][joint_name] = np.array(
-                mission_data["adj_joint_vel"][joint_name]
-            )
-            mission_data["adj_command_position"][joint_name] = np.array(
-                mission_data["adj_command_position"][joint_name]
-            )
-
-        print("adj_base_lin_vel shape:", mission_data["adj_base_lin_vel"].shape)
-        print("adj_base_ang_vel shape:", mission_data["adj_base_ang_vel"].shape)
-        print(
-            "adj_projected_gravity shape:", mission_data["adj_projected_gravity"].shape
-        )
-        print(
-            "adj_velocity_commands shape:", mission_data["adj_velocity_commands"].shape
-        )
-        print("adj_joint_pos keys:", list(mission_data["adj_joint_pos"].keys()))
-        print("adj_joint_vel keys:", list(mission_data["adj_joint_vel"].keys()))
+            print(f"Mission {mission_key}: {len(mission_data['absolute_timestamps'])} samples")
 
     def _combine_all_missions(self):
         """Combine data from all missions into a single dataset with mission boundaries"""
@@ -449,12 +338,12 @@ class GrandTourDataloader:
         if mission_name in self.missions_data:
             data = self.missions_data[mission_name]
             print(f"Mission {mission_name}:")
-            print("  raw_base_lin_vel shape:", data["raw_base_lin_vel"].shape)
-            print("  raw_base_ang_vel shape:", data["raw_base_ang_vel"].shape)
-            print("  raw_projected_gravity shape:", data["raw_projected_gravity"].shape)
-            print("  raw_velocity_commands shape:", data["raw_velocity_commands"].shape)
-            print("  raw_joint_pos keys:", list(data["raw_joint_pos"].keys()))
-            print("  raw_joint_vel keys:", list(data["raw_joint_vel"].keys()))
+            print("  adj_base_lin_vel shape:", data["adj_base_lin_vel"].shape)
+            print("  adj_base_ang_vel shape:", data["adj_base_ang_vel"].shape)
+            print("  adj_projected_gravity shape:", data["adj_projected_gravity"].shape)
+            print("  adj_velocity_commands shape:", data["adj_velocity_commands"].shape)
+            print("  adj_joint_pos keys:", list(data["adj_joint_pos"].keys()))
+            print("  adj_joint_vel keys:", list(data["adj_joint_vel"].keys()))
 
     def load_data(self, mission_name_short):
         """Legacy method - use load_single_mission instead"""

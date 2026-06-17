@@ -11,13 +11,14 @@ generate_standup_data:
 generate_trot_data:
     python ./scripts/eval.py --checkpoint=./cyberdog_final.ckpt --task=cyber2_trot --online=true --generate_data=true
 
-train_grand_tour:
-    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour
+train_grand_tour offset="0" frequency="30":
+    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour --offset {{offset}} --frequency {{frequency}}
 
-train_grand_tour_goal_conditioning:
-    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour --grand_tour_goal_cond
+train_grand_tour_with_upsampling_50_hz offset="0":
+    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour --upsample_factor 5 --frequency 50 --offset {{offset}}
 
-train_isaaclab:
-    #!/bin/bash
-    conda activate diffuseloco
-    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds isaaclab
+train_grand_tour_goal_conditioning offset="0":
+    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds grand_tour --grand_tour_goal_cond --frequency 50 --offset {{offset}}
+
+train_isaaclab offset="0":
+    WANDB_API_KEY={{WANDB_KEY_VALUE}} WANDB_ENTITY={{WANDB_ENTITY_VALUE}} python ./scripts/train.py --ds isaaclab --offset {{offset}}
