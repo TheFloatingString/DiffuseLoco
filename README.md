@@ -200,6 +200,28 @@ source env.sh
 python scripts/train.py
 ```
 
+## Justfile Recipes
+
+A `.justfile` is provided for common workflows. Install [just](https://github.com/casey/just) and create a `.env` file with your credentials:
+
+```
+LAURENCE_WANDB_API_KEY=<your_wandb_key>
+WANDB_ENTITY=<your_wandb_entity>
+```
+
+**Train on Grand Tour dataset:**
+```bash
+just train_grand_tour                        # default offset=0, frequency=30
+just train_grand_tour offset=100             # skip first 100 samples
+just train_grand_tour offset=0 frequency=50  # override frequency
+```
+
+**Train on IsaacLab CSV data:**
+```bash
+just train_isaaclab             # default offset=0
+just train_isaaclab offset=50
+```
+
 ## Compatibility
 
 The codebase is tested on the following systems:
